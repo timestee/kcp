@@ -253,22 +253,23 @@ typedef struct IQUEUEHEAD iqueue_head;
 //=====================================================================
 // SEGMENT
 //=====================================================================
+// 模拟tcp segment，
 struct IKCPSEG
 {
 	struct IQUEUEHEAD node;
-	IUINT32 conv;
-	IUINT32 cmd;
-	IUINT32 frg;
-	IUINT32 wnd;
-	IUINT32 ts;
-	IUINT32 sn;
-	IUINT32 una;
-	IUINT32 len;
-	IUINT32 resendts;
-	IUINT32 rto;
-	IUINT32 fastack;
-	IUINT32 xmit;
-	char data[1];
+	IUINT32 conv; // 会话id,对接无连接的udp协议时用以核对双方身份
+	IUINT32 cmd;  // segment类型, ack、数据、询问\告知窗口大小
+	IUINT32 frg;  // message中的segment分片id(由大到小，0表示最后一个分片)
+	IUINT32 wnd;  // 可用接收窗口大小，窗口-队列
+	IUINT32 ts;   // 发送时间戳
+	IUINT32 sn;   // segment序号
+	IUINT32 una;  // 接收滑动窗口左端，加速ack
+	IUINT32 len;  // 数据端长度
+	IUINT32 resendts; // 下次超时重传的时间戳
+	IUINT32 rto;// 该分片的超时重传等待时间
+	IUINT32 fastack;//该分片被跳过的次数，超过指定阈值，启动fast重传
+	IUINT32 xmit;//发送该分片的次数
+	char data[1]; //数据区
 };
 
 
@@ -277,28 +278,60 @@ struct IKCPSEG
 //---------------------------------------------------------------------
 struct IKCPCB
 {
+	// conv为会话id,mtu链路层包大小限制, mss最大分片，state当前状态
 	IUINT32 conv, mtu, mss, state;
+	// snd_una 发送的segment的未确认最小编号，此序号之前的包都已确认
+	// snd_nxt 发送窗口左端
+	// rcv_nxt 接收窗口左端，此序号之前的包都已完备
 	IUINT32 snd_una, snd_nxt, rcv_nxt;
+	// ts_recent,ts_lastack为unuse代码
+	// ssthresh 慢启动门限，slow start thresh,cwnd大于该值，慢启动过程结束，进入拥塞避免阶段
 	IUINT32 ts_recent, ts_lastack, ssthresh;
+	// rx_rttval ack接收rtt浮动值
+	// rx_srtt ack接收rtt静态值
+	// rx_rto 由ack接收延迟计算出来的重传超时时间
+	// rx_minrto 最小重传超时时间
 	IINT32 rx_rttval, rx_srtt, rx_rto, rx_minrto;
+	// snd_wnd 发送窗口尺寸
+	// rcv_wnd 接收窗口尺寸
+	// rmt_wnd 远端接收窗口尺寸
+	// cwnd拥塞窗口尺寸
+	// probe 探查变量
 	IUINT32 snd_wnd, rcv_wnd, rmt_wnd, cwnd, probe;
+	// current 当前ts
+	// interval 内部flush刷新间隔
+	// ts_flush 下次flush刷新ts
+	// xmit 发送总次数
 	IUINT32 current, interval, ts_flush, xmit;
+	// nrcv_buf 接收缓冲区长度
+	// nsnd_buf 发送缓冲区长度
 	IUINT32 nrcv_buf, nsnd_buf;
+	// nrcv_que 接收队列长度
+	// nsnd_que 发送队列长度
 	IUINT32 nrcv_que, nsnd_que;
+	// nodelay 是否开启非延迟ack
+	// updated 是否调用过update函数的标识
 	IUINT32 nodelay, updated;
+	// ts_probe 下次探查窗口时间
+	// probe_wait 探查窗口需要等待的时间
 	IUINT32 ts_probe, probe_wait;
+	// dead_link 最大重传次数
+	// incr 可发送的最大数据量
 	IUINT32 dead_link, incr;
-	struct IQUEUEHEAD snd_queue;
-	struct IQUEUEHEAD rcv_queue;
-	struct IQUEUEHEAD snd_buf;
-	struct IQUEUEHEAD rcv_buf;
-	IUINT32 *acklist;
-	IUINT32 ackcount;
-	IUINT32 ackblock;
-	void *user;
-	char *buffer;
-	int fastresend;
+	struct IQUEUEHEAD snd_queue;//发送队列
+	struct IQUEUEHEAD rcv_queue;//接收队列
+	struct IQUEUEHEAD snd_buf; //发送缓冲
+	struct IQUEUEHEAD rcv_buf; //接收缓冲
+	IUINT32 *acklist; // 缓存ack列表
+	IUINT32 ackcount; // ack次数
+	IUINT32 ackblock; // 阈值，重新分配空间
+	void *user; //用户数据
+	char *buffer; //缓冲区
+	int fastresend;//  触发快速重传的重复ack个数
+	//nocwnd 取消拥塞控制
+	//stream是否采用流传输模式
 	int nocwnd, stream;
+	// log标记
 	int logmask;
 	int (*output)(const char *buf, int len, struct IKCPCB *kcp, void *user);
 	void (*writelog)(const char *log, struct IKCPCB *kcp, void *user);
