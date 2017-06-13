@@ -967,8 +967,10 @@ void ikcp_flush(ikcpcb *kcp)
 			ikcp_output(kcp, buffer, size);
 			ptr = buffer;
 		}
-		ikcp_ack_get(kcp, i, &seg.sn, &seg.ts);
-		ptr = ikcp_encode_seg(ptr, &seg);
+      		ikcp_ack_get(kcp, i, &seg.sn, &seg.ts);
+		if(seg.sn>kcp.rcv_nxt || i == count-1){
+	            ptr = ikcp_encode_seg(ptr, &seg);
+		}
 	}
 
 	kcp->ackcount = 0;
